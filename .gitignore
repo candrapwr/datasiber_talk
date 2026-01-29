@@ -1,0 +1,6 @@
+node_modules/
+chat.sqlite
+chat.sqlite-*
+uploads/
+.DS_Store
+.env
