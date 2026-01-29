@@ -273,6 +273,7 @@
         background: #0c1914;
         position: relative;
         flex: 0 0 auto;
+        padding-bottom: calc(18px + env(safe-area-inset-bottom));
       }
       .typing {
         padding: 6px 18px 0;
@@ -408,11 +409,18 @@
       }
       @media (max-width: 420px) {
         .room-bar {
-          flex-direction: column;
-          align-items: flex-start;
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          gap: 6px;
+          padding: 8px 10px;
+          -webkit-overflow-scrolling: touch;
+        }
+        .room-label {
+          display: none;
         }
         .room-link {
-          max-width: 100%;
+          max-width: 140px;
+          flex: 0 0 auto;
         }
         .composer {
           flex-wrap: nowrap;
@@ -458,7 +466,7 @@
         <div class="status-dot" title="Online"></div>
       </div>
       <div class="room-bar">
-        <span>Room link:</span>
+        <span class="room-label">Room link:</span>
         <span id="room-link" class="room-link">-</span>
         <button id="copy-link" type="button">Copy</button>
         <button id="new-room" type="button">New Room</button>
