@@ -14,6 +14,7 @@ const emojiBtn = document.getElementById("emoji-btn");
 const emojiPanel = document.getElementById("emoji-panel");
 const fileBtn = document.getElementById("file-btn");
 const fileInput = document.getElementById("file-input");
+const voiceBtn = document.getElementById("voice-btn");
 const fileOverlay = document.getElementById("file-overlay");
 const filePreview = document.getElementById("file-preview");
 const fileCaption = document.getElementById("file-caption");
@@ -38,6 +39,10 @@ let nextBefore = null;
 let typingTimer = null;
 let isTyping = false;
 let lastReadSent = 0;
+let pendingFile = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
 
 function formatTime(iso) {
   const date = iso ? new Date(iso) : new Date();
@@ -334,6 +339,52 @@ fileBtn.addEventListener("click", () => {
   fileInput.click();
 });
 
+voiceBtn.addEventListener("click", async () => {
+  if (!joined) return;
+  if (isRecording) {
+    mediaRecorder.stop();
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert("Browser tidak mendukung rekam suara.");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    isRecording = true;
+    voiceBtn.textContent = "⏹️";
+
+    mediaRecorder.addEventListener("dataavailable", (event) => {
+      if (event.data && event.data.size > 0) audioChunks.push(event.data);
+    });
+
+    mediaRecorder.addEventListener("stop", () => {
+      isRecording = false;
+      voiceBtn.textContent = "🎤";
+      const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+      const fileName = `voice-${Date.now()}.webm`;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const fileData = String(reader.result);
+        openFileOverlay({
+          fileName,
+          fileType: blob.type || "audio/webm",
+          fileData,
+          fileSize: blob.size,
+        });
+      };
+      reader.readAsDataURL(blob);
+      stream.getTracks().forEach((track) => track.stop());
+    });
+
+    mediaRecorder.start();
+  } catch {
+    alert("Gagal akses mikrofon.");
+  }
+});
+
 function setChatEnabled(enabled) {
   input.disabled = !enabled;
   form.querySelector("button").disabled = !enabled;
@@ -341,6 +392,43 @@ function setChatEnabled(enabled) {
 
 setChatEnabled(false);
 loadMoreBtn.style.display = "none";
+
+function resetFileOverlay() {
+  pendingFile = null;
+  fileOverlay.classList.add("hidden");
+  fileCaption.value = "";
+  fileInput.value = "";
+  filePreview.innerHTML = "";
+}
+
+function renderFilePreview(fileInfo) {
+  filePreview.innerHTML = "";
+  if (!fileInfo) return;
+  if (fileInfo.fileType && fileInfo.fileType.startsWith("image/")) {
+    const img = document.createElement("img");
+    img.src = fileInfo.fileData;
+    img.alt = fileInfo.fileName;
+    filePreview.appendChild(img);
+    return;
+  }
+  if (fileInfo.fileType && fileInfo.fileType.startsWith("audio/")) {
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.src = fileInfo.fileData;
+    audio.style.width = "100%";
+    filePreview.appendChild(audio);
+    return;
+  }
+  const info = document.createElement("div");
+  info.textContent = `${fileInfo.fileName} (${Math.round((fileInfo.fileSize || 0) / 1024)} KB)`;
+  filePreview.appendChild(info);
+}
+
+function openFileOverlay(fileInfo) {
+  pendingFile = fileInfo;
+  renderFilePreview(fileInfo);
+  fileOverlay.classList.remove("hidden");
+}
 
 function renderMembers(members = []) {
   membersEl.innerHTML = "";
@@ -566,61 +654,48 @@ fileInput.addEventListener("change", () => {
   const reader = new FileReader();
   reader.onload = () => {
     const fileData = String(reader.result);
-    filePreview.innerHTML = "";
-    if (file.type.startsWith("image/")) {
-      const img = document.createElement("img");
-      img.src = fileData;
-      img.alt = file.name;
-      filePreview.appendChild(img);
-    } else {
-      const info = document.createElement("div");
-      info.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
-      filePreview.appendChild(info);
-    }
-    fileOverlay.classList.remove("hidden");
-
-    const onCancel = () => {
-      fileOverlay.classList.add("hidden");
-      fileCaption.value = "";
-      fileInput.value = "";
-      filePreview.innerHTML = "";
-      fileCancel.removeEventListener("click", onCancel);
-      fileSend.removeEventListener("click", onSend);
-    };
-
-    const onSend = () => {
-      const id = createId();
-      const sentAt = new Date().toISOString();
-      const caption = fileCaption.value.trim();
-      const bubble = addBubble({
-        text: caption,
-        direction: "outgoing",
-        sentAt,
-        id,
-        sender: currentName || "Saya",
-        messageType: "file",
-        fileName: file.name,
-        fileType: file.type,
-        fileData,
-      });
-      bubble.dataset.sentAt = sentAt;
-      pendingMap.set(id, bubble);
-      primus.write({
-        type: "message",
-        messageType: "file",
-        id,
-        senderId: clientId,
-        sentAt,
-        text: caption,
-        fileName: file.name,
-        fileType: file.type,
-        fileData,
-      });
-      onCancel();
-    };
-
-    fileCancel.addEventListener("click", onCancel);
-    fileSend.addEventListener("click", onSend);
+    openFileOverlay({
+      fileName: file.name,
+      fileType: file.type,
+      fileData,
+      fileSize: file.size,
+    });
   };
   reader.readAsDataURL(file);
+});
+
+fileCancel.addEventListener("click", () => {
+  resetFileOverlay();
+});
+
+fileSend.addEventListener("click", () => {
+  if (!pendingFile) return;
+  const id = createId();
+  const sentAt = new Date().toISOString();
+  const caption = fileCaption.value.trim();
+  const bubble = addBubble({
+    text: caption,
+    direction: "outgoing",
+    sentAt,
+    id,
+    sender: currentName || "Saya",
+    messageType: "file",
+    fileName: pendingFile.fileName,
+    fileType: pendingFile.fileType,
+    fileData: pendingFile.fileData,
+  });
+  bubble.dataset.sentAt = sentAt;
+  pendingMap.set(id, bubble);
+  primus.write({
+    type: "message",
+    messageType: "file",
+    id,
+    senderId: clientId,
+    sentAt,
+    text: caption,
+    fileName: pendingFile.fileName,
+    fileType: pendingFile.fileType,
+    fileData: pendingFile.fileData,
+  });
+  resetFileOverlay();
 });
