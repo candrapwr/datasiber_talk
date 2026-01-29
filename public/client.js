@@ -70,6 +70,8 @@ let localStream = null;
 let callType = "audio";
 let currentFacingMode = "user";
 let isMuted = false;
+let videoDeviceIds = [];
+let currentVideoDeviceId = null;
 
 function formatTime(iso) {
   const date = iso ? new Date(iso) : new Date();
@@ -665,9 +667,21 @@ function getVideoConstraints() {
 
 function getMediaConstraints(type) {
   if (type === "video") {
-    return { audio: true, video: getVideoConstraints() };
+    const video = currentVideoDeviceId
+      ? { deviceId: { exact: currentVideoDeviceId }, ...getVideoConstraints() }
+      : getVideoConstraints();
+    return { audio: true, video };
   }
   return { audio: true, video: false };
+}
+
+async function loadVideoDevices() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  videoDeviceIds = devices.filter((d) => d.kind === "videoinput").map((d) => d.deviceId);
+  if (!currentVideoDeviceId && videoDeviceIds.length > 0) {
+    currentVideoDeviceId = videoDeviceIds[0];
+  }
 }
 
 async function createPeerConnection(targetId) {
@@ -703,6 +717,7 @@ async function startCall(targetId, targetName, type = "audio") {
   callState = "calling";
   updateCallUI();
   try {
+    await loadVideoDevices();
     localStream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(type));
     callPc = await createPeerConnection(targetId);
     localStream.getTracks().forEach((track) => callPc.addTrack(track, localStream));
@@ -726,6 +741,7 @@ async function acceptCall() {
   callState = "in-call";
   updateCallUI();
   try {
+    await loadVideoDevices();
     localStream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(callType));
     callPc = await createPeerConnection(callPeerId);
     localStream.getTracks().forEach((track) => callPc.addTrack(track, localStream));
@@ -752,15 +768,12 @@ async function updateVideoQuality() {
     if (!sender) return;
     let videoStream = null;
     try {
-      videoStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: getVideoConstraints(),
-      });
+      const video = currentVideoDeviceId
+        ? { deviceId: { exact: currentVideoDeviceId }, ...getVideoConstraints() }
+        : getVideoConstraints();
+      videoStream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
     } catch {
-      videoStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: true,
-      });
+      videoStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
     }
     const newTrack = videoStream.getVideoTracks()[0];
     if (!newTrack) return;
@@ -780,6 +793,14 @@ async function updateVideoQuality() {
 
 async function switchCamera() {
   if (callType !== "video" || callState !== "in-call") return;
+  await loadVideoDevices();
+  if (videoDeviceIds.length > 1) {
+    const idx = Math.max(0, videoDeviceIds.indexOf(currentVideoDeviceId));
+    const nextIdx = (idx + 1) % videoDeviceIds.length;
+    currentVideoDeviceId = videoDeviceIds[nextIdx];
+    await updateVideoQuality();
+    return;
+  }
   currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
   await updateVideoQuality();
 }
