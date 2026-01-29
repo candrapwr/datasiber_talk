@@ -6,6 +6,7 @@ const nameForm = document.getElementById("name-form");
 const nameInput = document.getElementById("name-input");
 const roomLinkEl = document.getElementById("room-link");
 const copyLinkBtn = document.getElementById("copy-link");
+const newRoomBtn = document.getElementById("new-room");
 const membersEl = document.getElementById("members");
 const loadMoreBtn = document.getElementById("load-more");
 const typingEl = document.getElementById("typing-indicator");
@@ -257,6 +258,10 @@ function getRoomId() {
   return roomId;
 }
 
+function generateRoomId() {
+  return crypto.randomUUID().split("-")[0];
+}
+
 const roomId = getRoomId();
 const roomLink = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
 roomLinkEl.textContent = roomLink;
@@ -278,6 +283,13 @@ copyLinkBtn.addEventListener("click", async () => {
     copyLinkBtn.textContent = "Gagal";
     setTimeout(() => (copyLinkBtn.textContent = "Copy"), 1200);
   }
+});
+
+newRoomBtn.addEventListener("click", () => {
+  const url = new URL(window.location.href);
+  const newId = generateRoomId();
+  url.searchParams.set("room", newId);
+  window.location.href = url.toString();
 });
 
 loadMoreBtn.addEventListener("click", () => {
