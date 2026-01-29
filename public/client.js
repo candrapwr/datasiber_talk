@@ -19,7 +19,13 @@ const filePreview = document.getElementById("file-preview");
 const fileCaption = document.getElementById("file-caption");
 const fileCancel = document.getElementById("file-cancel");
 const fileSend = document.getElementById("file-send");
-const clientId = crypto.randomUUID();
+function createId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  const rand = () => Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, "0");
+  return `${rand()}${rand()}${Date.now().toString(16)}`;
+}
+
+const clientId = createId();
 const pendingMap = new Map();
 const messageMap = new Map();
 const readBy = new Map();
@@ -251,7 +257,7 @@ function getRoomId() {
   const url = new URL(window.location.href);
   let roomId = url.searchParams.get("room");
   if (!roomId) {
-    roomId = crypto.randomUUID().split("-")[0];
+    roomId = generateRoomId();
     url.searchParams.set("room", roomId);
     window.history.replaceState({}, "", url.toString());
   }
@@ -259,7 +265,8 @@ function getRoomId() {
 }
 
 function generateRoomId() {
-  return crypto.randomUUID().split("-")[0];
+  const id = createId();
+  return id.slice(0, 8);
 }
 
 const roomId = getRoomId();
@@ -495,7 +502,7 @@ form.addEventListener("submit", (event) => {
   if (!joined) return;
   const text = input.value.trim();
   if (!text) return;
-  const id = crypto.randomUUID();
+  const id = createId();
   const sentAt = new Date().toISOString();
   const bubble = addBubble({
     text,
@@ -583,7 +590,7 @@ fileInput.addEventListener("change", () => {
     };
 
     const onSend = () => {
-      const id = crypto.randomUUID();
+      const id = createId();
       const sentAt = new Date().toISOString();
       const caption = fileCaption.value.trim();
       const bubble = addBubble({
