@@ -18,6 +18,10 @@ const callReject = document.getElementById("call-reject");
 const callBar = document.getElementById("call-bar");
 const callStatus = document.getElementById("call-status");
 const callEnd = document.getElementById("call-end");
+const callQuality = document.getElementById("call-quality");
+const callVideo = document.getElementById("call-video");
+const localVideo = document.getElementById("local-video");
+const remoteVideo = document.getElementById("remote-video");
 const remoteAudio = document.getElementById("remote-audio");
 const toolBtn = document.getElementById("tool-btn");
 const toolPanel = document.getElementById("tool-panel");
@@ -61,6 +65,7 @@ let callPeerName = null;
 let callPc = null;
 let callOffer = null;
 let localStream = null;
+let callType = "audio";
 
 function formatTime(iso) {
   const date = iso ? new Date(iso) : new Date();
@@ -365,6 +370,10 @@ callEnd.addEventListener("click", () => {
   resetCall();
 });
 
+callQuality.addEventListener("change", () => {
+  if (callState === "in-call") updateVideoQuality();
+});
+
 const emojis = [
   "😀","😁","😂","🤣","😊","😍",
   "😎","🤩","😇","😴","🤔","😮",
@@ -516,11 +525,21 @@ function renderMembers(members = []) {
     callBtn.disabled = member.id === clientId;
     callBtn.addEventListener("click", () => {
       if (member.id === clientId) return;
-      startCall(member.id, member.name);
+      startCall(member.id, member.name, "audio");
+    });
+    const videoBtn = document.createElement("button");
+    videoBtn.className = "member-call";
+    videoBtn.textContent = "🎥";
+    videoBtn.title = "Video call";
+    videoBtn.disabled = member.id === clientId;
+    videoBtn.addEventListener("click", () => {
+      if (member.id === clientId) return;
+      startCall(member.id, member.name, "video");
     });
     chip.appendChild(avatar);
     chip.appendChild(nameEl);
     chip.appendChild(callBtn);
+    chip.appendChild(videoBtn);
     membersEl.appendChild(chip);
   });
 }
@@ -572,6 +591,7 @@ function updateCallUI() {
   if (callState === "idle") {
     callBar.classList.remove("active");
     callStatus.textContent = "";
+    callVideo.classList.remove("active");
     return;
   }
   callBar.classList.add("active");
@@ -580,6 +600,8 @@ function updateCallUI() {
   } else if (callState === "in-call") {
     callStatus.textContent = `Panggilan dengan ${callPeerName || "user"}`;
   }
+  if (callType === "video") callVideo.classList.add("active");
+  else callVideo.classList.remove("active");
 }
 
 function resetCall() {
@@ -587,6 +609,7 @@ function resetCall() {
   callPeerId = null;
   callPeerName = null;
   callOffer = null;
+  callType = "audio";
   if (callPc) {
     callPc.onicecandidate = null;
     callPc.ontrack = null;
@@ -598,8 +621,33 @@ function resetCall() {
     localStream = null;
   }
   if (remoteAudio) remoteAudio.srcObject = null;
+  if (remoteVideo) remoteVideo.srcObject = null;
+  if (localVideo) localVideo.srcObject = null;
   callOverlay.classList.add("hidden");
   updateCallUI();
+}
+
+function getVideoConstraints() {
+  const quality = callQuality?.value || "low";
+  if (quality === "medium") {
+    return {
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { ideal: 24 },
+    };
+  }
+  return {
+    width: { ideal: 640 },
+    height: { ideal: 360 },
+    frameRate: { ideal: 15 },
+  };
+}
+
+function getMediaConstraints(type) {
+  if (type === "video") {
+    return { audio: true, video: getVideoConstraints() };
+  }
+  return { audio: true, video: false };
 }
 
 async function createPeerConnection(targetId) {
@@ -612,27 +660,38 @@ async function createPeerConnection(targetId) {
     }
   };
   pc.ontrack = (event) => {
-    if (remoteAudio) {
-      remoteAudio.srcObject = event.streams[0];
+    const stream = event.streams[0];
+    if (callType === "video") {
+      if (remoteVideo) {
+        remoteVideo.srcObject = stream;
+        remoteVideo.play().catch(() => {});
+      }
+    } else if (remoteAudio) {
+      remoteAudio.srcObject = stream;
       remoteAudio.play().catch(() => {});
     }
   };
   return pc;
 }
 
-async function startCall(targetId, targetName) {
+async function startCall(targetId, targetName, type = "audio") {
   if (!joined || callState !== "idle") return;
   callPeerId = targetId;
   callPeerName = targetName;
+  callType = type;
   callState = "calling";
   updateCallUI();
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localStream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(type));
     callPc = await createPeerConnection(targetId);
     localStream.getTracks().forEach((track) => callPc.addTrack(track, localStream));
+    if (type === "video" && localVideo) {
+      localVideo.srcObject = localStream;
+      localVideo.play().catch(() => {});
+    }
     const offer = await callPc.createOffer();
     await callPc.setLocalDescription(offer);
-    primus.write({ type: "call_offer", to: targetId, sdp: offer });
+    primus.write({ type: "call_offer", to: targetId, sdp: offer, callType: type });
   } catch {
     resetCall();
   }
@@ -644,17 +703,46 @@ async function acceptCall() {
   callState = "in-call";
   updateCallUI();
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localStream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(callType));
     callPc = await createPeerConnection(callPeerId);
     localStream.getTracks().forEach((track) => callPc.addTrack(track, localStream));
+    if (callType === "video" && localVideo) {
+      localVideo.srcObject = localStream;
+      localVideo.play().catch(() => {});
+    }
     await callPc.setRemoteDescription(callOffer);
     const answer = await callPc.createAnswer();
     await callPc.setLocalDescription(answer);
-    primus.write({ type: "call_answer", to: callPeerId, sdp: answer });
-    if (remoteAudio) remoteAudio.play().catch(() => {});
+    primus.write({ type: "call_answer", to: callPeerId, sdp: answer, callType });
+    if (callType === "audio" && remoteAudio) remoteAudio.play().catch(() => {});
   } catch {
     resetCall();
   }
+}
+
+async function updateVideoQuality() {
+  if (callType !== "video" || !callPc || !localStream) return;
+  try {
+    const sender = callPc.getSenders().find((s) => s.track && s.track.kind === "video");
+    if (!sender) return;
+    const videoStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: getVideoConstraints(),
+    });
+    const newTrack = videoStream.getVideoTracks()[0];
+    if (!newTrack) return;
+    await sender.replaceTrack(newTrack);
+    const oldTrack = localStream.getVideoTracks()[0];
+    if (oldTrack) {
+      localStream.removeTrack(oldTrack);
+      oldTrack.stop();
+    }
+    localStream.addTrack(newTrack);
+    if (localVideo) {
+      localVideo.srcObject = localStream;
+      localVideo.play().catch(() => {});
+    }
+  } catch {}
 }
 
 function sendJoin(name) {
@@ -739,8 +827,9 @@ primus.on("data", async (data) => {
     }
     callPeerId = data.from;
     callPeerName = data.name || "Anon";
+    callType = data.callType || "audio";
     callOffer = data.sdp;
-    callFrom.textContent = `${callPeerName} sedang memanggil`;
+    callFrom.textContent = `${callPeerName} sedang memanggil (${callType})`;
     callOverlay.classList.remove("hidden");
     return;
   }

@@ -435,6 +435,11 @@
       .call-bar.active {
         display: flex;
       }
+      .call-controls {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+      }
       .call-end {
         background: rgba(255, 92, 92, 0.2);
         border: 1px solid rgba(255, 92, 92, 0.5);
@@ -442,6 +447,20 @@
         border-radius: 10px;
         padding: 6px 10px;
         cursor: pointer;
+      }
+      .call-video {
+        display: none;
+        gap: 10px;
+        padding: 10px 12px;
+      }
+      .call-video.active {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+      .call-video video {
+        width: 100%;
+        border-radius: 12px;
+        background: #0b1612;
       }
       button {
         padding: 12px 18px;
@@ -500,6 +519,9 @@
         .tool-panel {
           left: 12px;
           bottom: 66px;
+        }
+        .call-video.active {
+          grid-template-columns: 1fr;
         }
         .card {
           width: min(520px, 92vw);
@@ -590,7 +612,17 @@
       <div id="members" class="members-bar"></div>
       <div id="call-bar" class="call-bar">
         <span id="call-status">Sedang memanggil...</span>
-        <button id="call-end" class="call-end" type="button">Akhiri</button>
+        <div class="call-controls">
+          <select id="call-quality">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+          </select>
+          <button id="call-end" class="call-end" type="button">Akhiri</button>
+        </div>
+      </div>
+      <div id="call-video" class="call-video">
+        <video id="local-video" autoplay muted playsinline></video>
+        <video id="remote-video" autoplay playsinline></video>
       </div>
       <div id="log" class="chat">
         <button id="load-more" class="load-more" type="button">Load more</button>

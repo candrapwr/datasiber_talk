@@ -255,6 +255,7 @@ primus.on("connection", (spark) => {
         name: spark.name || "Anon",
         sdp: data.sdp,
         candidate: data.candidate,
+        callType: data.callType,
       });
       return;
     }
