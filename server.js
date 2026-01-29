@@ -1,5 +1,5 @@
 import http from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import Primus from "primus";
 import sqlite3 from "sqlite3";
@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = join(process.cwd(), "public");
 const UPLOADS_DIR = join(process.cwd(), "uploads");
-const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const ASSET_VERSION = Date.now().toString();
 
 const mimeByExt = {
@@ -209,6 +209,27 @@ primus.on("connection", (spark) => {
       if (!spark.roomId) return;
       const beforeRowId = Number(data?.beforeRowId) || null;
       sendHistory(spark.roomId, spark, beforeRowId).catch(() => {});
+      return;
+    }
+
+    if (data?.type === "clear_room") {
+      if (!spark.roomId) return;
+      const roomId = spark.roomId;
+      const rows = await dbAll(
+        "SELECT filePath FROM messages WHERE roomId = ? AND filePath IS NOT NULL",
+        [roomId]
+      ).catch(() => []);
+      const files = Array.isArray(rows) ? rows.map((r) => r.filePath).filter(Boolean) : [];
+      await dbRun("DELETE FROM messages WHERE roomId = ?", [roomId]).catch(() => {});
+      await Promise.all(
+        files.map(async (path) => {
+          const full = join(process.cwd(), path.replace(/^\//, ""));
+          try {
+            await unlink(full);
+          } catch {}
+        })
+      );
+      roomBroadcast(roomId, { type: "cleared" });
       return;
     }
 

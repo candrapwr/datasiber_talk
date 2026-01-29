@@ -7,6 +7,7 @@ const nameInput = document.getElementById("name-input");
 const roomLinkEl = document.getElementById("room-link");
 const copyLinkBtn = document.getElementById("copy-link");
 const newRoomBtn = document.getElementById("new-room");
+const clearRoomBtn = document.getElementById("clear-room");
 const membersEl = document.getElementById("members");
 const loadMoreBtn = document.getElementById("load-more");
 const typingEl = document.getElementById("typing-indicator");
@@ -324,6 +325,13 @@ newRoomBtn.addEventListener("click", () => {
   window.location.href = url.toString();
 });
 
+clearRoomBtn.addEventListener("click", () => {
+  if (!joined) return;
+  const ok = confirm("Hapus semua chat di room ini? Ini juga akan menghapus file/voice.");
+  if (!ok) return;
+  primus.write({ type: "clear_room" });
+});
+
 loadMoreBtn.addEventListener("click", () => {
   if (!nextBefore) return;
   primus.write({ type: "history", beforeRowId: nextBefore });
@@ -559,6 +567,16 @@ primus.on("data", (data) => {
     updateSeenIndicators();
     return;
   }
+  if (data.type === "cleared") {
+    messageMap.clear();
+    pendingMap.clear();
+    readBy.clear();
+    typingUsers.clear();
+    nextBefore = null;
+    loadMoreBtn.style.display = "none";
+    logEl.querySelectorAll(".bubble").forEach((el) => el.remove());
+    return;
+  }
   if (data.type === "system") {
     return;
   }
@@ -679,7 +697,7 @@ window.addEventListener("focus", () => {
 fileInput.addEventListener("change", () => {
   const file = fileInput.files && fileInput.files[0];
   if (!file || !joined) return;
-  if (file.size > 2 * 1024 * 1024) {
+  if (file.size > 20 * 1024 * 1024) {
     // system message hidden
     fileInput.value = "";
     return;
