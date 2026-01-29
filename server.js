@@ -108,6 +108,20 @@ function dbRun(sql, params = []) {
   });
 }
 
+function decodeBase64DataUrl(dataUrl) {
+  if (typeof dataUrl !== "string") return null;
+  const marker = "base64,";
+  const idx = dataUrl.indexOf(marker);
+  if (idx === -1) return null;
+  const b64 = dataUrl.slice(idx + marker.length);
+  if (!b64) return null;
+  try {
+    return Buffer.from(b64, "base64");
+  } catch {
+    return null;
+  }
+}
+
 function dbGet(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => {
@@ -239,9 +253,8 @@ primus.on("connection", (spark) => {
       const receivedAt = new Date().toISOString();
 
       if (messageType === "file" && fileData && fileType) {
-        const match = /^data:([^;]+);base64,(.+)$/.exec(fileData);
-        if (match) {
-          const buffer = Buffer.from(match[2], "base64");
+        const buffer = decodeBase64DataUrl(fileData);
+        if (buffer) {
           if (buffer.length > MAX_UPLOAD_BYTES) {
             spark.write({
               type: "system",
