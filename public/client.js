@@ -72,6 +72,12 @@ function nameToColor(name = "") {
   return `hsl(${hash}, 70%, 70%)`;
 }
 
+function isAudioFile(fileType, fileName) {
+  if (fileType && fileType.startsWith("audio/")) return true;
+  if (!fileName) return false;
+  return /\.(webm|wav|mp3|ogg|m4a)$/i.test(fileName);
+}
+
 function isAtBottom() {
   return logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
 }
@@ -162,7 +168,7 @@ function addBubble({
       img.style.borderRadius = "10px";
       content.appendChild(img);
     }
-    if (fileType && fileType.startsWith("audio/") && fileUrl) {
+    if (isAudioFile(fileType, fileName) && fileUrl) {
       const audio = document.createElement("audio");
       audio.controls = true;
       audio.src = fileUrl;
@@ -177,7 +183,7 @@ function addBubble({
       caption.style.marginTop = "8px";
       content.appendChild(caption);
     }
-    if (!fileType || !fileType.startsWith("audio/")) {
+    if (!isAudioFile(fileType, fileName)) {
       const link = document.createElement("a");
       link.href = fileUrl || "#";
       link.download = fileName || "file";
