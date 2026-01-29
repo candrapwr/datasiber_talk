@@ -522,24 +522,22 @@ function renderMembers(members = []) {
     callBtn.className = "member-call";
     callBtn.textContent = "📞";
     callBtn.title = "Panggil";
-    callBtn.disabled = member.id === clientId;
     callBtn.addEventListener("click", () => {
-      if (member.id === clientId) return;
       startCall(member.id, member.name, "audio");
     });
     const videoBtn = document.createElement("button");
     videoBtn.className = "member-call";
     videoBtn.textContent = "🎥";
     videoBtn.title = "Video call";
-    videoBtn.disabled = member.id === clientId;
     videoBtn.addEventListener("click", () => {
-      if (member.id === clientId) return;
       startCall(member.id, member.name, "video");
     });
     chip.appendChild(avatar);
     chip.appendChild(nameEl);
-    chip.appendChild(callBtn);
-    chip.appendChild(videoBtn);
+    if (member.id !== clientId) {
+      chip.appendChild(callBtn);
+      chip.appendChild(videoBtn);
+    }
     membersEl.appendChild(chip);
   });
 }
