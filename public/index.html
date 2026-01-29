@@ -342,6 +342,20 @@
       .tool-panel.hidden {
         display: none;
       }
+      .recording-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #ff8b8b;
+        padding: 6px 8px;
+        border-radius: 10px;
+        background: rgba(255, 139, 139, 0.12);
+        border: 1px solid rgba(255, 139, 139, 0.3);
+      }
+      .recording-indicator.hidden {
+        display: none;
+      }
       .icon-button {
         width: 40px;
         height: 40px;
@@ -538,6 +552,7 @@
             <button id="file-btn" class="icon-button" type="button" title="File">📎</button>
             <button id="voice-btn" class="icon-button" type="button" title="Voice">🎤</button>
           </div>
+          <span id="recording-indicator" class="recording-indicator hidden">● Recording…</span>
           <input id="message" placeholder="Ketik pesan..." autocomplete="off" />
           <button id="send-btn" type="submit" class="icon-button">➤</button>
         </div>

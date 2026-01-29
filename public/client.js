@@ -17,6 +17,7 @@ const emojiPanel = document.getElementById("emoji-panel");
 const fileBtn = document.getElementById("file-btn");
 const fileInput = document.getElementById("file-input");
 const voiceBtn = document.getElementById("voice-btn");
+const recordingIndicator = document.getElementById("recording-indicator");
 const fileOverlay = document.getElementById("file-overlay");
 const filePreview = document.getElementById("file-preview");
 const fileCaption = document.getElementById("file-caption");
@@ -176,14 +177,16 @@ function addBubble({
       caption.style.marginTop = "8px";
       content.appendChild(caption);
     }
-    const link = document.createElement("a");
-    link.href = fileUrl || "#";
-    link.download = fileName || "file";
-    link.textContent = fileName || "Download file";
-    link.style.color = "#c6f2e3";
-    link.style.display = "inline-block";
-    link.style.marginTop = "6px";
-    content.appendChild(link);
+    if (!fileType || !fileType.startsWith("audio/")) {
+      const link = document.createElement("a");
+      link.href = fileUrl || "#";
+      link.download = fileName || "file";
+      link.textContent = fileName || "Download file";
+      link.style.color = "#c6f2e3";
+      link.style.display = "inline-block";
+      link.style.marginTop = "6px";
+      content.appendChild(link);
+    }
   } else {
     content.textContent = text;
   }
@@ -376,6 +379,7 @@ voiceBtn.addEventListener("click", async () => {
     mediaRecorder = new MediaRecorder(stream);
     isRecording = true;
     voiceBtn.textContent = "⏹️";
+    recordingIndicator.classList.remove("hidden");
 
     mediaRecorder.addEventListener("dataavailable", (event) => {
       if (event.data && event.data.size > 0) audioChunks.push(event.data);
@@ -384,6 +388,7 @@ voiceBtn.addEventListener("click", async () => {
     mediaRecorder.addEventListener("stop", () => {
       isRecording = false;
       voiceBtn.textContent = "🎤";
+      recordingIndicator.classList.add("hidden");
       const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
       const fileName = `voice-${Date.now()}.webm`;
       const reader = new FileReader();
