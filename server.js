@@ -9,6 +9,7 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = join(process.cwd(), "public");
 const UPLOADS_DIR = join(process.cwd(), "uploads");
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+const ASSET_VERSION = Date.now().toString();
 
 const mimeByExt = {
   ".html": "text/html; charset=utf-8",
@@ -24,7 +25,11 @@ const server = http.createServer(async (req, res) => {
   const filePath = join(baseDir, pathname.replace(/^\/uploads/, ""));
 
   try {
-    const data = await readFile(filePath);
+    let data = await readFile(filePath);
+    if (!isUpload && pathname === "/index.html") {
+      const html = data.toString("utf-8").replaceAll("__ASSET_VERSION__", ASSET_VERSION);
+      data = Buffer.from(html, "utf-8");
+    }
     const ext = extname(filePath).toLowerCase();
     res.writeHead(200, { "Content-Type": mimeByExt[ext] || "application/octet-stream" });
     res.end(data);
