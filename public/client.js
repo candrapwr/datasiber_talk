@@ -396,6 +396,9 @@ callBlur.addEventListener("click", () => {
   if (callType !== "video") return;
   isBlurred = !isBlurred;
   updateBlurState();
+  if (callPeerId) {
+    primus.write({ type: "call_blur", to: callPeerId, enabled: isBlurred });
+  }
 });
 
 const emojis = [
@@ -827,11 +830,12 @@ function updateMuteState() {
 }
 
 function updateBlurState() {
-  if (!localVideo) return;
-  if (isBlurred) localVideo.classList.add("blur");
-  else localVideo.classList.remove("blur");
   callBlur.textContent = isBlurred ? "😶‍🌫️" : "🫥";
   callBlur.title = isBlurred ? "Unblur" : "Blur";
+  if (localVideo) {
+    if (isBlurred) localVideo.classList.add("blur");
+    else localVideo.classList.remove("blur");
+  }
 }
 
 function sendJoin(name) {
@@ -920,6 +924,13 @@ primus.on("data", async (data) => {
     callOffer = data.sdp;
     callFrom.textContent = `${callPeerName} sedang memanggil (${callType})`;
     callOverlay.classList.remove("hidden");
+    return;
+  }
+  if (data.type === "call_blur") {
+    if (remoteVideo) {
+      if (data.enabled) remoteVideo.classList.add("blur");
+      else remoteVideo.classList.remove("blur");
+    }
     return;
   }
   if (data.type === "call_answer") {
