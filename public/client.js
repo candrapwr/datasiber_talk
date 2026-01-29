@@ -10,6 +10,8 @@ const newRoomBtn = document.getElementById("new-room");
 const membersEl = document.getElementById("members");
 const loadMoreBtn = document.getElementById("load-more");
 const typingEl = document.getElementById("typing-indicator");
+const toolBtn = document.getElementById("tool-btn");
+const toolPanel = document.getElementById("tool-panel");
 const emojiBtn = document.getElementById("emoji-btn");
 const emojiPanel = document.getElementById("emoji-panel");
 const fileBtn = document.getElementById("file-btn");
@@ -158,6 +160,15 @@ function addBubble({
       img.style.maxWidth = "100%";
       img.style.borderRadius = "10px";
       content.appendChild(img);
+    }
+    if (fileType && fileType.startsWith("audio/") && fileUrl) {
+      const audio = document.createElement("audio");
+      audio.controls = true;
+      audio.src = fileUrl;
+      audio.style.width = "100%";
+      audio.style.display = "block";
+      audio.style.marginTop = "6px";
+      content.appendChild(audio);
     }
     if (text) {
       const caption = document.createElement("div");
@@ -327,8 +338,16 @@ emojis.forEach((emoji) => {
     input.focus();
     input.selectionStart = input.selectionEnd = start + emoji.length;
     emojiPanel.classList.add("hidden");
+    toolPanel.classList.add("hidden");
   });
   emojiPanel.appendChild(btn);
+});
+
+toolBtn.addEventListener("click", () => {
+  toolPanel.classList.toggle("hidden");
+  if (!emojiPanel.classList.contains("hidden")) {
+    emojiPanel.classList.add("hidden");
+  }
 });
 
 emojiBtn.addEventListener("click", () => {
@@ -336,11 +355,13 @@ emojiBtn.addEventListener("click", () => {
 });
 
 fileBtn.addEventListener("click", () => {
+  toolPanel.classList.add("hidden");
   fileInput.click();
 });
 
 voiceBtn.addEventListener("click", async () => {
   if (!joined) return;
+  toolPanel.classList.add("hidden");
   if (isRecording) {
     mediaRecorder.stop();
     return;
@@ -586,6 +607,7 @@ primus.on("error", (err) => {
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
+  toolPanel.classList.add("hidden");
   if (!joined) return;
   const text = input.value.trim();
   if (!text) return;

@@ -326,6 +326,22 @@
         width: 100%;
         flex-wrap: wrap;
       }
+      .tool-panel {
+        position: absolute;
+        bottom: 76px;
+        left: 18px;
+        display: flex;
+        gap: 8px;
+        padding: 10px;
+        background: #0f1f18;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+        z-index: 5;
+      }
+      .tool-panel.hidden {
+        display: none;
+      }
       .icon-button {
         width: 40px;
         height: 40px;
@@ -365,6 +381,7 @@
         box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
         max-height: 180px;
         overflow-y: auto;
+        z-index: 6;
       }
       .emoji-panel.hidden {
         display: none;
@@ -428,6 +445,10 @@
           bottom: 66px;
           width: min(260px, 86vw);
           grid-template-columns: repeat(6, 1fr);
+        }
+        .tool-panel {
+          left: 12px;
+          bottom: 66px;
         }
         .card {
           width: min(520px, 92vw);
@@ -511,11 +532,14 @@
       <div id="typing-indicator" class="typing hidden"></div>
       <form id="chat-form">
         <div class="composer">
-          <button id="emoji-btn" class="icon-button" type="button">😊</button>
-          <button id="file-btn" class="icon-button" type="button">📎</button>
-          <button id="voice-btn" class="icon-button" type="button">🎤</button>
+          <button id="tool-btn" class="icon-button" type="button">＋</button>
+          <div id="tool-panel" class="tool-panel hidden">
+            <button id="emoji-btn" class="icon-button" type="button" title="Emoji">😊</button>
+            <button id="file-btn" class="icon-button" type="button" title="File">📎</button>
+            <button id="voice-btn" class="icon-button" type="button" title="Voice">🎤</button>
+          </div>
           <input id="message" placeholder="Ketik pesan..." autocomplete="off" />
-          <button type="submit">Kirim</button>
+          <button id="send-btn" type="submit" class="icon-button">➤</button>
         </div>
         <input id="file-input" type="file" hidden />
         <div id="emoji-panel" class="emoji-panel hidden"></div>
