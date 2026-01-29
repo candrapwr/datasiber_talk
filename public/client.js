@@ -21,6 +21,7 @@ const callEnd = document.getElementById("call-end");
 const callQuality = document.getElementById("call-quality");
 const callSwitchCamera = document.getElementById("call-switch-camera");
 const callMute = document.getElementById("call-mute");
+const callBlur = document.getElementById("call-blur");
 const callVideo = document.getElementById("call-video");
 const localVideo = document.getElementById("local-video");
 const remoteVideo = document.getElementById("remote-video");
@@ -72,6 +73,7 @@ let currentFacingMode = "user";
 let isMuted = false;
 let videoDeviceIds = [];
 let currentVideoDeviceId = null;
+let isBlurred = false;
 
 function formatTime(iso) {
   const date = iso ? new Date(iso) : new Date();
@@ -390,6 +392,12 @@ callMute.addEventListener("click", () => {
   updateMuteState();
 });
 
+callBlur.addEventListener("click", () => {
+  if (callType !== "video") return;
+  isBlurred = !isBlurred;
+  updateBlurState();
+});
+
 const emojis = [
   "😀","😁","😂","🤣","😊","😍",
   "😎","🤩","😇","😴","🤔","😮",
@@ -629,6 +637,7 @@ function resetCall() {
   callOffer = null;
   callType = "audio";
   isMuted = false;
+  isBlurred = false;
   if (callPc) {
     callPc.onicecandidate = null;
     callPc.ontrack = null;
@@ -645,6 +654,7 @@ function resetCall() {
   callOverlay.classList.add("hidden");
   updateCallUI();
   updateMuteState();
+  updateBlurState();
 }
 
 function getVideoConstraints() {
@@ -727,6 +737,7 @@ async function startCall(targetId, targetName, type = "audio") {
       callVideo.classList.add("local-only");
     }
     updateMuteState();
+    updateBlurState();
     const offer = await callPc.createOffer();
     await callPc.setLocalDescription(offer);
     primus.write({ type: "call_offer", to: targetId, sdp: offer, callType: type });
@@ -751,6 +762,7 @@ async function acceptCall() {
       callVideo.classList.add("local-only");
     }
     updateMuteState();
+    updateBlurState();
     await callPc.setRemoteDescription(callOffer);
     const answer = await callPc.createAnswer();
     await callPc.setLocalDescription(answer);
@@ -812,6 +824,14 @@ function updateMuteState() {
   });
   callMute.textContent = isMuted ? "🔈" : "🔇";
   callMute.title = isMuted ? "Unmute" : "Mute";
+}
+
+function updateBlurState() {
+  if (!localVideo) return;
+  if (isBlurred) localVideo.classList.add("blur");
+  else localVideo.classList.remove("blur");
+  callBlur.textContent = isBlurred ? "😶‍🌫️" : "🫥";
+  callBlur.title = isBlurred ? "Unblur" : "Blur";
 }
 
 function sendJoin(name) {

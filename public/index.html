@@ -476,6 +476,9 @@
         height: 100%;
         object-fit: cover;
       }
+      .call-video .video-wrap video.blur {
+        filter: blur(6px);
+      }
       button {
         padding: 12px 18px;
         border-radius: 12px;
@@ -641,6 +644,7 @@
           </select>
           <button id="call-mute" class="icon-button" type="button" title="Mute">🔇</button>
           <button id="call-switch-camera" class="icon-button" type="button" title="Switch camera">🔄</button>
+          <button id="call-blur" class="icon-button" type="button" title="Blur">🫥</button>
           <button id="call-end" class="call-end" type="button">Akhiri</button>
         </div>
       </div>
