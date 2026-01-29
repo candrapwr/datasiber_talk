@@ -612,7 +612,10 @@ async function createPeerConnection(targetId) {
     }
   };
   pc.ontrack = (event) => {
-    if (remoteAudio) remoteAudio.srcObject = event.streams[0];
+    if (remoteAudio) {
+      remoteAudio.srcObject = event.streams[0];
+      remoteAudio.play().catch(() => {});
+    }
   };
   return pc;
 }
@@ -648,6 +651,7 @@ async function acceptCall() {
     const answer = await callPc.createAnswer();
     await callPc.setLocalDescription(answer);
     primus.write({ type: "call_answer", to: callPeerId, sdp: answer });
+    if (remoteAudio) remoteAudio.play().catch(() => {});
   } catch {
     resetCall();
   }
