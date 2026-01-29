@@ -74,6 +74,7 @@ function ensureSchema() {
 ensureSchema();
 
 const rooms = new Map();
+const callPeers = new Map();
 const readStates = new Map();
 const HISTORY_LIMIT = 50;
 
@@ -97,6 +98,21 @@ function findSparkByUserId(roomId, userId) {
     if (spark.userId === userId) return spark;
   }
   return null;
+}
+
+function setCallPeer(a, b) {
+  if (!a || !b) return;
+  callPeers.set(a, b);
+  callPeers.set(b, a);
+}
+
+function clearCallPeer(a) {
+  const b = callPeers.get(a);
+  if (b) {
+    callPeers.delete(a);
+    callPeers.delete(b);
+  }
+  return b || null;
 }
 
 function dbAll(sql, params = []) {
@@ -227,6 +243,12 @@ primus.on("connection", (spark) => {
       if (!targetId) return;
       const target = findSparkByUserId(spark.roomId, targetId);
       if (!target) return;
+      if (data.type === "call_offer" || data.type === "call_answer") {
+        setCallPeer(spark.userId, targetId);
+      }
+      if (data.type === "call_end" || data.type === "call_reject" || data.type === "call_busy") {
+        clearCallPeer(spark.userId);
+      }
       target.write({
         type: data.type,
         from: spark.userId,
@@ -370,6 +392,11 @@ primus.on("connection", (spark) => {
 primus.on("disconnection", (spark) => {
   const roomId = spark.roomId;
   if (!roomId) return;
+  const peerId = clearCallPeer(spark.userId);
+  if (peerId) {
+    const peer = findSparkByUserId(roomId, peerId);
+    if (peer) peer.write({ type: "call_end", from: spark.userId });
+  }
   const room = rooms.get(roomId);
   if (!room) return;
   room.delete(spark);

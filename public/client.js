@@ -884,6 +884,14 @@ window.addEventListener("focus", () => {
   if (latest) sendRead(latest);
 });
 
+window.addEventListener("beforeunload", () => {
+  if (callPeerId) {
+    try {
+      primus.write({ type: "call_end", to: callPeerId });
+    } catch {}
+  }
+});
+
 fileInput.addEventListener("change", () => {
   const file = fileInput.files && fileInput.files[0];
   if (!file || !joined) return;
