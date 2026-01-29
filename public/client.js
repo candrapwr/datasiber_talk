@@ -19,6 +19,7 @@ const callBar = document.getElementById("call-bar");
 const callStatus = document.getElementById("call-status");
 const callEnd = document.getElementById("call-end");
 const callQuality = document.getElementById("call-quality");
+const callSwitchCamera = document.getElementById("call-switch-camera");
 const callVideo = document.getElementById("call-video");
 const localVideo = document.getElementById("local-video");
 const remoteVideo = document.getElementById("remote-video");
@@ -66,6 +67,7 @@ let callPc = null;
 let callOffer = null;
 let localStream = null;
 let callType = "audio";
+let currentFacingMode = "user";
 
 function formatTime(iso) {
   const date = iso ? new Date(iso) : new Date();
@@ -374,6 +376,10 @@ callQuality.addEventListener("change", () => {
   if (callState === "in-call") updateVideoQuality();
 });
 
+callSwitchCamera.addEventListener("click", () => {
+  switchCamera();
+});
+
 const emojis = [
   "😀","😁","😂","🤣","😊","😍",
   "😎","🤩","😇","😴","🤔","😮",
@@ -636,12 +642,14 @@ function getVideoConstraints() {
       width: { ideal: 1280 },
       height: { ideal: 720 },
       frameRate: { ideal: 24 },
+      facingMode: currentFacingMode,
     };
   }
   return {
     width: { ideal: 640 },
     height: { ideal: 360 },
     frameRate: { ideal: 15 },
+    facingMode: currentFacingMode,
   };
 }
 
@@ -748,6 +756,12 @@ async function updateVideoQuality() {
       localVideo.play().catch(() => {});
     }
   } catch {}
+}
+
+async function switchCamera() {
+  if (callType !== "video" || callState !== "in-call") return;
+  currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
+  await updateVideoQuality();
 }
 
 function sendJoin(name) {
