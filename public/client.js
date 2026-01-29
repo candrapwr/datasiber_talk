@@ -11,6 +11,14 @@ const clearRoomBtn = document.getElementById("clear-room");
 const membersEl = document.getElementById("members");
 const loadMoreBtn = document.getElementById("load-more");
 const typingEl = document.getElementById("typing-indicator");
+const callOverlay = document.getElementById("call-overlay");
+const callFrom = document.getElementById("call-from");
+const callAccept = document.getElementById("call-accept");
+const callReject = document.getElementById("call-reject");
+const callBar = document.getElementById("call-bar");
+const callStatus = document.getElementById("call-status");
+const callEnd = document.getElementById("call-end");
+const remoteAudio = document.getElementById("remote-audio");
 const toolBtn = document.getElementById("tool-btn");
 const toolPanel = document.getElementById("tool-panel");
 const emojiBtn = document.getElementById("emoji-btn");
@@ -47,6 +55,12 @@ let pendingFile = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
+let callState = "idle";
+let callPeerId = null;
+let callPeerName = null;
+let callPc = null;
+let callOffer = null;
+let localStream = null;
 
 function formatTime(iso) {
   const date = iso ? new Date(iso) : new Date();
@@ -337,6 +351,20 @@ loadMoreBtn.addEventListener("click", () => {
   primus.write({ type: "history", beforeRowId: nextBefore });
 });
 
+callAccept.addEventListener("click", () => {
+  acceptCall();
+});
+
+callReject.addEventListener("click", () => {
+  if (callPeerId) primus.write({ type: "call_reject", to: callPeerId });
+  resetCall();
+});
+
+callEnd.addEventListener("click", () => {
+  if (callPeerId) primus.write({ type: "call_end", to: callPeerId });
+  resetCall();
+});
+
 const emojis = [
   "😀","😁","😂","🤣","😊","😍",
   "😎","🤩","😇","😴","🤔","😮",
@@ -481,8 +509,18 @@ function renderMembers(members = []) {
     avatar.style.background = nameToColor(member.name);
     const nameEl = document.createElement("span");
     nameEl.textContent = member.name;
+    const callBtn = document.createElement("button");
+    callBtn.className = "member-call";
+    callBtn.textContent = "📞";
+    callBtn.title = "Panggil";
+    callBtn.disabled = member.id === clientId;
+    callBtn.addEventListener("click", () => {
+      if (member.id === clientId) return;
+      startCall(member.id, member.name);
+    });
     chip.appendChild(avatar);
     chip.appendChild(nameEl);
+    chip.appendChild(callBtn);
     membersEl.appendChild(chip);
   });
 }
@@ -530,6 +568,91 @@ function renderHistory(items = [], prepend = false) {
   }
 }
 
+function updateCallUI() {
+  if (callState === "idle") {
+    callBar.classList.remove("active");
+    callStatus.textContent = "";
+    return;
+  }
+  callBar.classList.add("active");
+  if (callState === "calling") {
+    callStatus.textContent = `Memanggil ${callPeerName || "user"}...`;
+  } else if (callState === "in-call") {
+    callStatus.textContent = `Panggilan dengan ${callPeerName || "user"}`;
+  }
+}
+
+function resetCall() {
+  callState = "idle";
+  callPeerId = null;
+  callPeerName = null;
+  callOffer = null;
+  if (callPc) {
+    callPc.onicecandidate = null;
+    callPc.ontrack = null;
+    callPc.close();
+    callPc = null;
+  }
+  if (localStream) {
+    localStream.getTracks().forEach((track) => track.stop());
+    localStream = null;
+  }
+  if (remoteAudio) remoteAudio.srcObject = null;
+  callOverlay.classList.add("hidden");
+  updateCallUI();
+}
+
+async function createPeerConnection(targetId) {
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  });
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      primus.write({ type: "call_ice", to: targetId, candidate: event.candidate });
+    }
+  };
+  pc.ontrack = (event) => {
+    if (remoteAudio) remoteAudio.srcObject = event.streams[0];
+  };
+  return pc;
+}
+
+async function startCall(targetId, targetName) {
+  if (!joined || callState !== "idle") return;
+  callPeerId = targetId;
+  callPeerName = targetName;
+  callState = "calling";
+  updateCallUI();
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    callPc = await createPeerConnection(targetId);
+    localStream.getTracks().forEach((track) => callPc.addTrack(track, localStream));
+    const offer = await callPc.createOffer();
+    await callPc.setLocalDescription(offer);
+    primus.write({ type: "call_offer", to: targetId, sdp: offer });
+  } catch {
+    resetCall();
+  }
+}
+
+async function acceptCall() {
+  if (!callOffer || !callPeerId) return;
+  callOverlay.classList.add("hidden");
+  callState = "in-call";
+  updateCallUI();
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    callPc = await createPeerConnection(callPeerId);
+    localStream.getTracks().forEach((track) => callPc.addTrack(track, localStream));
+    await callPc.setRemoteDescription(callOffer);
+    const answer = await callPc.createAnswer();
+    await callPc.setLocalDescription(answer);
+    primus.write({ type: "call_answer", to: callPeerId, sdp: answer });
+  } catch {
+    resetCall();
+  }
+}
+
 function sendJoin(name) {
   if (!name) return;
   pendingJoinName = name;
@@ -544,7 +667,7 @@ primus.on("open", () => {
   if (pendingJoinName) sendJoin(pendingJoinName);
 });
 
-primus.on("data", (data) => {
+primus.on("data", async (data) => {
   if (!data) return;
   if (data.type === "joined") {
     joined = true;
@@ -578,6 +701,44 @@ primus.on("data", (data) => {
     return;
   }
   if (data.type === "system") {
+    return;
+  }
+  if (data.type === "call_offer") {
+    if (callState !== "idle") {
+      primus.write({ type: "call_busy", to: data.from });
+      return;
+    }
+    callPeerId = data.from;
+    callPeerName = data.name || "Anon";
+    callOffer = data.sdp;
+    callFrom.textContent = `${callPeerName} sedang memanggil`;
+    callOverlay.classList.remove("hidden");
+    return;
+  }
+  if (data.type === "call_answer") {
+    if (!callPc) return;
+    await callPc.setRemoteDescription(data.sdp);
+    callState = "in-call";
+    updateCallUI();
+    return;
+  }
+  if (data.type === "call_ice") {
+    if (!callPc || !data.candidate) return;
+    try {
+      await callPc.addIceCandidate(data.candidate);
+    } catch {}
+    return;
+  }
+  if (data.type === "call_reject") {
+    resetCall();
+    return;
+  }
+  if (data.type === "call_busy") {
+    resetCall();
+    return;
+  }
+  if (data.type === "call_end") {
+    resetCall();
     return;
   }
   if (data.type === "history") {

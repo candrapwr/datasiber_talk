@@ -319,6 +319,19 @@
         border-radius: 999px;
         background: rgba(255, 255, 255, 0.06);
       }
+      .member-call {
+        border: none;
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text);
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 12px;
+      }
       .composer {
         display: flex;
         gap: 10px;
@@ -404,6 +417,30 @@
         border: none;
         background: transparent;
         font-size: 20px;
+        cursor: pointer;
+      }
+      .call-bar {
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 12px;
+        margin: 10px 12px 0;
+        border-radius: 12px;
+        background: rgba(35, 196, 140, 0.12);
+        border: 1px solid rgba(35, 196, 140, 0.35);
+        color: #b7f5dd;
+        font-size: 12px;
+      }
+      .call-bar.active {
+        display: flex;
+      }
+      .call-end {
+        background: rgba(255, 92, 92, 0.2);
+        border: 1px solid rgba(255, 92, 92, 0.5);
+        color: #ffd2d2;
+        border-radius: 10px;
+        padding: 6px 10px;
         cursor: pointer;
       }
       button {
@@ -526,6 +563,16 @@
         </div>
       </div>
     </div>
+    <div id="call-overlay" class="overlay layer hidden">
+      <div class="card">
+        <h2>Panggilan Masuk</h2>
+        <p id="call-from">-</p>
+        <div class="actions">
+          <button id="call-reject" type="button" class="icon-button">Tolak</button>
+          <button id="call-accept" type="button">Terima</button>
+        </div>
+      </div>
+    </div>
     <main class="app">
       <div class="header">
         <div class="header-title">
@@ -541,6 +588,10 @@
         <button id="clear-room" type="button" class="icon-button" title="Hapus chat">🗑️</button>
       </div>
       <div id="members" class="members-bar"></div>
+      <div id="call-bar" class="call-bar">
+        <span id="call-status">Sedang memanggil...</span>
+        <button id="call-end" class="call-end" type="button">Akhiri</button>
+      </div>
       <div id="log" class="chat">
         <button id="load-more" class="load-more" type="button">Load more</button>
       </div>
@@ -561,6 +612,7 @@
         <div id="emoji-panel" class="emoji-panel hidden"></div>
       </form>
     </main>
+    <audio id="remote-audio" autoplay></audio>
 
     <script src="/primus/primus.js?v=__ASSET_VERSION__"></script>
     <script src="/client.js?v=__ASSET_VERSION__"></script>

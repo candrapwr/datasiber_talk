@@ -90,6 +90,15 @@ function roomBroadcast(roomId, payload) {
   }
 }
 
+function findSparkByUserId(roomId, userId) {
+  const room = rooms.get(roomId);
+  if (!room) return null;
+  for (const spark of room) {
+    if (spark.userId === userId) return spark;
+  }
+  return null;
+}
+
 function dbAll(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
@@ -209,6 +218,22 @@ primus.on("connection", (spark) => {
       if (!spark.roomId) return;
       const beforeRowId = Number(data?.beforeRowId) || null;
       sendHistory(spark.roomId, spark, beforeRowId).catch(() => {});
+      return;
+    }
+
+    if (data?.type?.startsWith("call_")) {
+      if (!spark.roomId) return;
+      const targetId = String(data?.to || "");
+      if (!targetId) return;
+      const target = findSparkByUserId(spark.roomId, targetId);
+      if (!target) return;
+      target.write({
+        type: data.type,
+        from: spark.userId,
+        name: spark.name || "Anon",
+        sdp: data.sdp,
+        candidate: data.candidate,
+      });
       return;
     }
 
