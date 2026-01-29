@@ -6,6 +6,9 @@ const nameForm = document.getElementById("name-form");
 const nameInput = document.getElementById("name-input");
 const roomLinkEl = document.getElementById("room-link");
 const copyLinkBtn = document.getElementById("copy-link");
+const membersEl = document.getElementById("members");
+const loadMoreBtn = document.getElementById("load-more");
+const typingEl = document.getElementById("typing-indicator");
 const emojiBtn = document.getElementById("emoji-btn");
 const emojiPanel = document.getElementById("emoji-panel");
 const fileBtn = document.getElementById("file-btn");
@@ -17,10 +20,17 @@ const fileCancel = document.getElementById("file-cancel");
 const fileSend = document.getElementById("file-send");
 const clientId = crypto.randomUUID();
 const pendingMap = new Map();
+const messageMap = new Map();
+const readBy = new Map();
+const typingUsers = new Map();
 let isOpen = false;
 let joined = false;
 let pendingJoinName = null;
 let currentName = null;
+let nextBefore = null;
+let typingTimer = null;
+let isTyping = false;
+let lastReadSent = 0;
 
 function formatTime(iso) {
   const date = iso ? new Date(iso) : new Date();
@@ -30,6 +40,61 @@ function formatTime(iso) {
   const ms = String(date.getMilliseconds()).padStart(3, "0");
   const micros = "000";
   return `${hh}:${mm}:${ss}.${ms}${micros}`;
+}
+
+function nameToInitials(name = "") {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] || "";
+  const second = parts.length > 1 ? parts[1]?.[0] : "";
+  return (first + second).toUpperCase() || "?";
+}
+
+function nameToColor(name = "") {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash * 31 + name.charCodeAt(i)) % 360;
+  }
+  return `hsl(${hash}, 70%, 70%)`;
+}
+
+function isAtBottom() {
+  return logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
+}
+
+function getLatestRowId() {
+  let max = 0;
+  messageMap.forEach((bubble) => {
+    const rowId = Number(bubble.dataset.rowId || 0);
+    if (rowId > max) max = rowId;
+  });
+  return max || null;
+}
+
+function sendRead(rowId) {
+  if (!rowId || rowId <= lastReadSent) return;
+  lastReadSent = rowId;
+  readBy.set(clientId, rowId);
+  updateSeenIndicators();
+  primus.write({ type: "read", rowId });
+}
+
+function updateSeenIndicators() {
+  messageMap.forEach((bubble) => {
+    if (bubble.dataset.direction !== "outgoing") return;
+    const rowId = Number(bubble.dataset.rowId || 0);
+    if (!rowId) return;
+    let count = 0;
+    readBy.forEach((lastRowId, userId) => {
+      if (userId === clientId) return;
+      if (lastRowId >= rowId) count += 1;
+    });
+    const seenEl = bubble.querySelector(".seen");
+    if (!seenEl) return;
+    seenEl.style.display = count > 0 ? "inline-flex" : "none";
+    seenEl.title = count > 0 ? `Dibaca oleh ${count} pengguna` : "";
+    const badge = seenEl.querySelector(".seen-count");
+    if (badge) badge.textContent = String(count);
+  });
 }
 
 function addBubble({
@@ -45,18 +110,30 @@ function addBubble({
   fileType,
   fileData,
   filePath,
+  rowId,
+  prepend,
 }) {
   const bubble = document.createElement("div");
   bubble.className = `bubble ${system ? "system" : direction}`;
   if (id) bubble.dataset.id = id;
   if (sentAt) bubble.dataset.sentAt = sentAt;
+  if (rowId) bubble.dataset.rowId = rowId;
+  if (direction) bubble.dataset.direction = direction;
 
   const displaySender = sender || (direction === "outgoing" && !system ? "Saya" : "");
   if (displaySender) {
+    const header = document.createElement("div");
+    header.className = "bubble-header";
+    const avatar = document.createElement("span");
+    avatar.className = "avatar";
+    avatar.textContent = nameToInitials(displaySender);
+    avatar.style.background = nameToColor(displaySender);
+    header.appendChild(avatar);
     const senderEl = document.createElement("div");
     senderEl.className = "sender";
     senderEl.textContent = displaySender;
-    bubble.appendChild(senderEl);
+    header.appendChild(senderEl);
+    bubble.appendChild(header);
   }
 
   const content = document.createElement("div");
@@ -111,15 +188,36 @@ function addBubble({
 
     meta.appendChild(iconRow);
 
+    if (direction === "outgoing") {
+      const seen = document.createElement("span");
+      seen.className = "seen";
+      seen.style.display = "none";
+      const dot = document.createElement("span");
+      dot.className = "seen-dot";
+      const count = document.createElement("span");
+      count.className = "seen-count";
+      count.textContent = "0";
+      seen.appendChild(dot);
+      seen.appendChild(count);
+      meta.appendChild(seen);
+    }
+
     bubble.appendChild(meta);
   }
 
-  logEl.appendChild(bubble);
-  logEl.scrollTop = logEl.scrollHeight;
+  if (prepend) {
+    logEl.insertBefore(bubble, loadMoreBtn.nextSibling);
+  } else {
+    const stickToBottom = isAtBottom();
+    logEl.appendChild(bubble);
+    if (stickToBottom) logEl.scrollTop = logEl.scrollHeight;
+  }
+  if (id) messageMap.set(id, bubble);
+  updateSeenIndicators();
   return bubble;
 }
 
-function updateState(id, receivedAt) {
+function updateState(id, receivedAt, rowId) {
   const bubble = pendingMap.get(id);
   if (!bubble) return;
   const meta = bubble.querySelector(".meta");
@@ -141,6 +239,9 @@ function updateState(id, receivedAt) {
       timeEl.appendChild(receivedIcon);
     }
   }
+  if (rowId) bubble.dataset.rowId = rowId;
+  messageMap.set(id, bubble);
+  updateSeenIndicators();
 }
 
 const primus = new Primus();
@@ -179,6 +280,11 @@ copyLinkBtn.addEventListener("click", async () => {
   }
 });
 
+loadMoreBtn.addEventListener("click", () => {
+  if (!nextBefore) return;
+  primus.write({ type: "history", beforeRowId: nextBefore });
+});
+
 const emojis = [
   "😀","😁","😂","🤣","😊","😍",
   "😎","🤩","😇","😴","🤔","😮",
@@ -215,13 +321,74 @@ function setChatEnabled(enabled) {
 }
 
 setChatEnabled(false);
+loadMoreBtn.style.display = "none";
+
+function renderMembers(members = []) {
+  membersEl.innerHTML = "";
+  members.forEach((member) => {
+    const chip = document.createElement("span");
+    chip.className = "member-chip";
+    const avatar = document.createElement("span");
+    avatar.className = "avatar";
+    avatar.textContent = nameToInitials(member.name);
+    avatar.style.background = nameToColor(member.name);
+    const nameEl = document.createElement("span");
+    nameEl.textContent = member.name;
+    chip.appendChild(avatar);
+    chip.appendChild(nameEl);
+    membersEl.appendChild(chip);
+  });
+}
+
+function renderTyping() {
+  const names = Array.from(typingUsers.values()).filter(Boolean);
+  if (names.length === 0) {
+    typingEl.classList.add("hidden");
+    typingEl.textContent = "";
+    return;
+  }
+  typingEl.classList.remove("hidden");
+  typingEl.textContent =
+    names.length === 1
+      ? `${names[0]} sedang mengetik...`
+      : `${names.slice(0, 2).join(", ")}${names.length > 2 ? "..." : ""} sedang mengetik...`;
+}
+
+function renderHistory(items = [], prepend = false) {
+  if (!Array.isArray(items) || items.length === 0) return;
+  const prevHeight = logEl.scrollHeight;
+  const prevTop = logEl.scrollTop;
+  items.forEach((item) => {
+    if (item.id && messageMap.has(item.id)) return;
+    const isMine = item.senderId === clientId || (currentName && item.name === currentName);
+    addBubble({
+      text: item.text,
+      direction: isMine ? "outgoing" : "incoming",
+      sentAt: item.sentAt,
+      receivedAt: item.receivedAt,
+      id: item.id,
+      sender: item.name,
+      messageType: item.messageType || "text",
+      fileName: item.fileName,
+      fileType: item.fileType,
+      fileData: item.fileData,
+      filePath: item.filePath,
+      rowId: item.rowId,
+      prepend,
+    });
+  });
+  if (prepend) {
+    const diff = logEl.scrollHeight - prevHeight;
+    logEl.scrollTop = prevTop + diff;
+  }
+}
 
 function sendJoin(name) {
   if (!name) return;
   pendingJoinName = name;
   currentName = name;
   if (!isOpen) return;
-  primus.write({ type: "join", name, roomId });
+  primus.write({ type: "join", name, roomId, userId: clientId });
 }
 
 primus.on("open", () => {
@@ -240,32 +407,49 @@ primus.on("data", (data) => {
     addBubble({ text: `Masuk ke room ${data.roomId}`, system: true });
     return;
   }
+  if (data.type === "members") {
+    renderMembers(data.members || []);
+    typingUsers.forEach((_, userId) => {
+      if (!data.members?.some((member) => member.id === userId)) typingUsers.delete(userId);
+    });
+    const memberIds = new Set((data.members || []).map((member) => member.id));
+    readBy.forEach((_, userId) => {
+      if (userId !== clientId && !memberIds.has(userId)) readBy.delete(userId);
+    });
+    renderTyping();
+    updateSeenIndicators();
+    return;
+  }
   if (data.type === "system") {
     addBubble({ text: data.text, system: true });
     return;
   }
   if (data.type === "history") {
-    if (!Array.isArray(data.items)) return;
-    data.items.forEach((item) => {
-      const isMine = currentName && item.name === currentName;
-      addBubble({
-        text: item.text,
-        direction: isMine ? "outgoing" : "incoming",
-        sentAt: item.sentAt,
-        receivedAt: item.receivedAt,
-        id: item.id,
-        sender: item.name,
-        messageType: item.messageType || "text",
-        fileName: item.fileName,
-        fileType: item.fileType,
-        fileData: item.fileData,
-        filePath: item.filePath,
-      });
-    });
+    const initial = messageMap.size === 0;
+    renderHistory(data.items || [], !initial);
+    if (initial) logEl.scrollTop = logEl.scrollHeight;
+    nextBefore = data.nextBefore || null;
+    loadMoreBtn.style.display = nextBefore ? "block" : "none";
+    if (initial) {
+      const latest = getLatestRowId();
+      if (latest) sendRead(latest);
+    }
+    return;
+  }
+  if (data.type === "typing") {
+    if (data.userId === clientId) return;
+    if (data.isTyping) typingUsers.set(data.userId, data.name || "Anon");
+    else typingUsers.delete(data.userId);
+    renderTyping();
+    return;
+  }
+  if (data.type === "read") {
+    readBy.set(data.userId, data.rowId || 0);
+    updateSeenIndicators();
     return;
   }
   if (data.type === "received") {
-    updateState(data.id, data.at);
+    updateState(data.id, data.at, data.rowId);
     return;
   }
   if (data.type === "broadcast") {
@@ -281,7 +465,12 @@ primus.on("data", (data) => {
       fileType: data.fileType,
       fileData: data.fileData,
       filePath: data.filePath,
+      rowId: data.rowId,
     });
+    if (isAtBottom()) {
+      const latest = getLatestRowId();
+      sendRead(latest);
+    }
   }
 });
 
@@ -307,6 +496,10 @@ form.addEventListener("submit", (event) => {
   bubble.dataset.sentAt = sentAt;
   pendingMap.set(id, bubble);
   primus.write({ type: "message", messageType: "text", text, id, senderId: clientId, sentAt });
+  if (isTyping) {
+    isTyping = false;
+    primus.write({ type: "typing", isTyping: false });
+  }
   input.value = "";
 });
 
@@ -315,6 +508,33 @@ nameForm.addEventListener("submit", (event) => {
   const name = nameInput.value.trim();
   if (!name) return;
   sendJoin(name);
+});
+
+input.addEventListener("input", () => {
+  if (!joined) return;
+  if (!isTyping) {
+    isTyping = true;
+    primus.write({ type: "typing", isTyping: true });
+  }
+  if (typingTimer) clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => {
+    isTyping = false;
+    primus.write({ type: "typing", isTyping: false });
+  }, 1200);
+});
+
+logEl.addEventListener("scroll", () => {
+  if (!joined) return;
+  if (isAtBottom()) {
+    const latest = getLatestRowId();
+    sendRead(latest);
+  }
+});
+
+window.addEventListener("focus", () => {
+  if (!joined) return;
+  const latest = getLatestRowId();
+  if (latest) sendRead(latest);
 });
 
 fileInput.addEventListener("change", () => {

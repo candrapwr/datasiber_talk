@@ -69,6 +69,8 @@ function ensureSchema() {
 ensureSchema();
 
 const rooms = new Map();
+const readStates = new Map();
+const HISTORY_LIMIT = 50;
 
 function getRoom(roomId) {
   if (!rooms.has(roomId)) rooms.set(roomId, new Set());
@@ -101,6 +103,50 @@ function dbRun(sql, params = []) {
   });
 }
 
+function dbGet(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) reject(err);
+      else resolve(row);
+    });
+  });
+}
+
+function getReadState(roomId) {
+  if (!readStates.has(roomId)) readStates.set(roomId, new Map());
+  return readStates.get(roomId);
+}
+
+function emitMembers(roomId) {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  const members = Array.from(room).map((spark) => ({
+    id: spark.userId,
+    name: spark.name || "Anon",
+  }));
+  roomBroadcast(roomId, { type: "members", members });
+}
+
+async function sendHistory(roomId, spark, beforeRowId = null) {
+  const baseSql =
+    "SELECT rowid as rowId, id, roomId, senderId, name, text, sentAt, receivedAt, messageType, fileName, fileType, fileData, filePath FROM messages WHERE roomId = ?";
+  const params = [roomId];
+  let sql = baseSql;
+  if (beforeRowId) {
+    sql += " AND rowid < ?";
+    params.push(beforeRowId);
+  }
+  sql += " ORDER BY rowid DESC LIMIT ?";
+  params.push(HISTORY_LIMIT);
+
+  const rows = await dbAll(sql, params);
+  const items = rows.reverse();
+  const nextBefore =
+    items.length === HISTORY_LIMIT ? items[0]?.rowId || null : null;
+
+  spark.write({ type: "history", items, nextBefore });
+}
+
 primus.on("connection", (spark) => {
   spark.write({
     type: "system",
@@ -112,10 +158,12 @@ primus.on("connection", (spark) => {
     if (data?.type === "join") {
       const roomId = String(data?.roomId || "").trim();
       const name = String(data?.name || "Anon").trim().slice(0, 32);
+      const userId = String(data?.userId || "").trim();
       if (!roomId) return;
 
       spark.roomId = roomId;
       spark.name = name;
+      spark.userId = userId || spark.id;
 
       getRoom(roomId).add(spark);
 
@@ -126,20 +174,48 @@ primus.on("connection", (spark) => {
         at: new Date().toISOString(),
       });
 
-      dbAll(
-        "SELECT id, roomId, senderId, name, text, sentAt, receivedAt, messageType, fileName, fileType, fileData, filePath FROM messages WHERE roomId = ? ORDER BY rowid DESC LIMIT 200",
-        [roomId]
-      )
-        .then((rows) => {
-          const items = rows.reverse();
-          spark.write({ type: "history", items });
-        })
-        .catch(() => {});
+      sendHistory(roomId, spark).catch(() => {});
+
+      emitMembers(roomId);
 
       roomBroadcast(roomId, {
         type: "system",
         text: `${name} bergabung`,
         at: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (data?.type === "history") {
+      if (!spark.roomId) return;
+      const beforeRowId = Number(data?.beforeRowId) || null;
+      sendHistory(spark.roomId, spark, beforeRowId).catch(() => {});
+      return;
+    }
+
+    if (data?.type === "typing") {
+      if (!spark.roomId) return;
+      roomBroadcast(spark.roomId, {
+        type: "typing",
+        userId: spark.userId,
+        name: spark.name || "Anon",
+        isTyping: Boolean(data?.isTyping),
+      });
+      return;
+    }
+
+    if (data?.type === "read") {
+      if (!spark.roomId) return;
+      const rowId = Number(data?.rowId) || null;
+      if (!rowId) return;
+      const state = getReadState(spark.roomId);
+      const prev = state.get(spark.userId) || 0;
+      if (rowId <= prev) return;
+      state.set(spark.userId, rowId);
+      roomBroadcast(spark.roomId, {
+        type: "read",
+        userId: spark.userId,
+        rowId,
       });
       return;
     }
@@ -156,13 +232,6 @@ primus.on("connection", (spark) => {
       let filePath = null;
       const sentAt = data?.sentAt || new Date().toISOString();
       const receivedAt = new Date().toISOString();
-
-      spark.write({
-        type: "received",
-        text,
-        id,
-        at: receivedAt,
-      });
 
       if (messageType === "file" && fileData && fileType) {
         const match = /^data:([^;]+);base64,(.+)$/.exec(fileData);
@@ -184,7 +253,7 @@ primus.on("connection", (spark) => {
         }
       }
 
-      dbRun(
+      const result = await dbRun(
         "INSERT OR IGNORE INTO messages (id, roomId, senderId, name, text, sentAt, receivedAt, messageType, fileName, fileType, fileData, filePath) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           id,
@@ -200,7 +269,21 @@ primus.on("connection", (spark) => {
           null,
           filePath,
         ]
-      ).catch(() => {});
+      ).catch(() => null);
+
+      let rowId = result?.lastID || null;
+      if (!rowId && id) {
+        const row = await dbGet("SELECT rowid as rowId FROM messages WHERE id = ?", [id]).catch(() => null);
+        rowId = row?.rowId || null;
+      }
+
+      spark.write({
+        type: "received",
+        text,
+        id,
+        at: receivedAt,
+        rowId,
+      });
 
       roomBroadcast(spark.roomId, {
         type: "broadcast",
@@ -214,6 +297,7 @@ primus.on("connection", (spark) => {
         fileName,
         fileType,
         filePath,
+        rowId,
       });
     }
   });
@@ -225,7 +309,10 @@ primus.on("disconnection", (spark) => {
   const room = rooms.get(roomId);
   if (!room) return;
   room.delete(spark);
+  const state = readStates.get(roomId);
+  if (state) state.delete(spark.userId);
   if (room.size === 0) rooms.delete(roomId);
+  emitMembers(roomId);
 });
 
 server.listen(PORT, () => {
