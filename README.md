@@ -1,23 +1,28 @@
 # DataSiber Talk
 
-Private room chat berbasis Primus WebSocket dengan histori chat tersimpan di SQLite. Setiap room diakses lewat link, user wajib isi nama sebelum chat. Mendukung emoji picker dan kirim file dengan caption (preview + konfirmasi sebelum kirim).
+Private room chat berbasis Primus WebSocket dengan histori chat tersimpan di SQLite. Room diakses lewat link, user wajib isi nama sebelum chat. Mendukung emoji picker, kirim file dengan caption, voice note, dan audio call 1‑1 (STUN‑only).
 
 ## Fitur Utama
 - **Room privat via link**: `?room=...` otomatis dibuat jika belum ada.
 - **Nama wajib** sebelum chat.
 - **Histori chat server‑side** (SQLite) agar semua user di room melihat histori yang sama.
-- **Emoji picker** sederhana.
+- **Emoji picker**.
 - **Kirim file + caption** (konfirmasi sebelum kirim).
-- **Indikator status** pesan (ikon sent/received).
+- **Voice note** (rekam audio → preview → kirim).
+- **Audio player** langsung di bubble chat.
+- **Indikator status** pesan (ikon sent/received) + **read receipts**.
 - **Typing indicator**.
-- **Daftar anggota room + avatar**.
-- **Read receipts** per user.
+- **Daftar anggota + avatar**.
 - **Pagination histori** (Load more).
+- **New room** dan **clear chat** (hapus pesan + file).
+- **Reconnect** otomatis saat jaringan putus.
+- **Audio call 1‑1 (STUN‑only)** dengan signaling via Primus.
 
 ## Teknologi
 - Node.js (ESM)
 - Primus (transformer `websockets` + `ws`)
 - SQLite (`sqlite3`)
+- WebRTC (audio call)
 
 ## Struktur Direktori
 - `server.js` – server HTTP + Primus + SQLite + upload file.
@@ -46,12 +51,19 @@ Private room chat berbasis Primus WebSocket dengan histori chat tersimpan di SQL
 
 ## Penyimpanan Histori
 - Histori chat disimpan di `chat.sqlite`.
-- Saat join, server mengirim histori **200 pesan terakhir** untuk room tersebut.
+- Saat join, server mengirim histori **50 pesan terakhir**.
+- Tombol **Load more** untuk memuat pesan lama.
 
 ## Upload File
 - File disimpan ke folder `uploads/`.
 - Database hanya menyimpan metadata + path file.
-- Batas ukuran file: **2MB** (client + server).
+- Batas ukuran file: **20MB** (client + server).
+- Voice note juga disimpan sebagai file audio (`.webm`).
+
+## Audio Call 1‑1 (STUN‑only)
+- Signaling via Primus.
+- STUN server: `stun:stun.l.google.com:19302`.
+- Tidak ada TURN → beberapa jaringan bisa gagal (NAT ketat).
 
 ## Konfigurasi Penting
 - **PORT**: default `3000` (bisa override via env `PORT`).
@@ -87,11 +99,7 @@ Jika akan production:
 - Batasi tipe file (whitelist).
 - Scan file upload (anti‑malware).
 - Simpan file di storage terpisah (S3/MinIO).
-
-## Catatan Fitur Lanjutan
-Fitur lanjutan seperti pagination histori, typing indicator, list anggota, avatar, dan read receipts sudah terimplementasi.
-
----
+- Tambahkan TURN untuk call yang stabil.
 
 ## Lisensi
 Bebas digunakan untuk pengembangan internal.
