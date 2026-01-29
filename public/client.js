@@ -20,6 +20,7 @@ const callStatus = document.getElementById("call-status");
 const callEnd = document.getElementById("call-end");
 const callQuality = document.getElementById("call-quality");
 const callSwitchCamera = document.getElementById("call-switch-camera");
+const callMute = document.getElementById("call-mute");
 const callVideo = document.getElementById("call-video");
 const localVideo = document.getElementById("local-video");
 const remoteVideo = document.getElementById("remote-video");
@@ -68,6 +69,7 @@ let callOffer = null;
 let localStream = null;
 let callType = "audio";
 let currentFacingMode = "user";
+let isMuted = false;
 
 function formatTime(iso) {
   const date = iso ? new Date(iso) : new Date();
@@ -380,6 +382,12 @@ callSwitchCamera.addEventListener("click", () => {
   switchCamera();
 });
 
+callMute.addEventListener("click", () => {
+  if (!localStream) return;
+  isMuted = !isMuted;
+  updateMuteState();
+});
+
 const emojis = [
   "😀","😁","😂","🤣","😊","😍",
   "😎","🤩","😇","😴","🤔","😮",
@@ -618,6 +626,7 @@ function resetCall() {
   callPeerName = null;
   callOffer = null;
   callType = "audio";
+  isMuted = false;
   if (callPc) {
     callPc.onicecandidate = null;
     callPc.ontrack = null;
@@ -633,6 +642,7 @@ function resetCall() {
   if (localVideo) localVideo.srcObject = null;
   callOverlay.classList.add("hidden");
   updateCallUI();
+  updateMuteState();
 }
 
 function getVideoConstraints() {
@@ -701,6 +711,7 @@ async function startCall(targetId, targetName, type = "audio") {
       localVideo.play().catch(() => {});
       callVideo.classList.add("local-only");
     }
+    updateMuteState();
     const offer = await callPc.createOffer();
     await callPc.setLocalDescription(offer);
     primus.write({ type: "call_offer", to: targetId, sdp: offer, callType: type });
@@ -723,6 +734,7 @@ async function acceptCall() {
       localVideo.play().catch(() => {});
       callVideo.classList.add("local-only");
     }
+    updateMuteState();
     await callPc.setRemoteDescription(callOffer);
     const answer = await callPc.createAnswer();
     await callPc.setLocalDescription(answer);
@@ -738,10 +750,18 @@ async function updateVideoQuality() {
   try {
     const sender = callPc.getSenders().find((s) => s.track && s.track.kind === "video");
     if (!sender) return;
-    const videoStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: getVideoConstraints(),
-    });
+    let videoStream = null;
+    try {
+      videoStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: getVideoConstraints(),
+      });
+    } catch {
+      videoStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: true,
+      });
+    }
     const newTrack = videoStream.getVideoTracks()[0];
     if (!newTrack) return;
     await sender.replaceTrack(newTrack);
@@ -762,6 +782,15 @@ async function switchCamera() {
   if (callType !== "video" || callState !== "in-call") return;
   currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
   await updateVideoQuality();
+}
+
+function updateMuteState() {
+  if (!localStream) return;
+  localStream.getAudioTracks().forEach((track) => {
+    track.enabled = !isMuted;
+  });
+  callMute.textContent = isMuted ? "🔈" : "🔇";
+  callMute.title = isMuted ? "Unmute" : "Mute";
 }
 
 function sendJoin(name) {
