@@ -671,6 +671,31 @@ primus.on("open", () => {
   if (pendingJoinName) sendJoin(pendingJoinName);
 });
 
+primus.on("reconnect", () => {
+  isOpen = true;
+  joined = false;
+  setChatEnabled(false);
+  if (pendingJoinName) sendJoin(pendingJoinName);
+});
+
+primus.on("reconnecting", () => {
+  isOpen = false;
+  joined = false;
+  setChatEnabled(false);
+});
+
+primus.on("end", () => {
+  isOpen = false;
+  joined = false;
+  setChatEnabled(false);
+});
+
+primus.on("close", () => {
+  isOpen = false;
+  joined = false;
+  setChatEnabled(false);
+});
+
 primus.on("data", async (data) => {
   if (!data) return;
   if (data.type === "joined") {
