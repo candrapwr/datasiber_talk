@@ -454,16 +454,17 @@
         padding: 10px 12px;
       }
       .call-video.active {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
       }
       .call-video.local-only {
-        grid-template-columns: 1fr;
+        justify-content: flex-start;
       }
       .call-video .video-wrap {
         position: relative;
-        width: 100%;
-        aspect-ratio: 16 / 9;
+        width: 140px;
+        height: 200px;
         background: #0b1612;
         border-radius: 12px;
         overflow: hidden;
@@ -534,10 +535,15 @@
           bottom: 66px;
         }
         .call-video.active {
-          grid-template-columns: 1fr;
+          flex-direction: row;
+          flex-wrap: wrap;
         }
         .call-video {
           padding: 8px 12px 0;
+        }
+        .call-video .video-wrap {
+          width: 120px;
+          height: 180px;
         }
         .card {
           width: min(520px, 92vw);
