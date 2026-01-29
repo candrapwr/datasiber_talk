@@ -412,7 +412,7 @@ function sendJoin(name) {
 
 primus.on("open", () => {
   isOpen = true;
-  addBubble({ text: "Tersambung ke server", system: true });
+  // system message hidden
   if (pendingJoinName) sendJoin(pendingJoinName);
 });
 
@@ -423,7 +423,7 @@ primus.on("data", (data) => {
     overlay.classList.add("hidden");
     setChatEnabled(true);
     if (currentName) localStorage.setItem(storageKey, currentName);
-    addBubble({ text: `Masuk ke room ${data.roomId}`, system: true });
+    // system message hidden
     return;
   }
   if (data.type === "members") {
@@ -440,7 +440,6 @@ primus.on("data", (data) => {
     return;
   }
   if (data.type === "system") {
-    addBubble({ text: data.text, system: true });
     return;
   }
   if (data.type === "history") {
@@ -494,7 +493,7 @@ primus.on("data", (data) => {
 });
 
 primus.on("error", (err) => {
-  addBubble({ text: err?.message || "Terjadi error", system: true });
+  // system message hidden
 });
 
 form.addEventListener("submit", (event) => {
@@ -560,7 +559,7 @@ fileInput.addEventListener("change", () => {
   const file = fileInput.files && fileInput.files[0];
   if (!file || !joined) return;
   if (file.size > 2 * 1024 * 1024) {
-    addBubble({ text: "File terlalu besar (maks 2MB)", system: true });
+    // system message hidden
     fileInput.value = "";
     return;
   }
