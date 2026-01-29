@@ -590,6 +590,7 @@ function updateCallUI() {
     callBar.classList.remove("active");
     callStatus.textContent = "";
     callVideo.classList.remove("active");
+    callVideo.classList.remove("local-only");
     return;
   }
   callBar.classList.add("active");
@@ -598,8 +599,11 @@ function updateCallUI() {
   } else if (callState === "in-call") {
     callStatus.textContent = `Panggilan dengan ${callPeerName || "user"}`;
   }
-  if (callType === "video") callVideo.classList.add("active");
-  else callVideo.classList.remove("active");
+  if (callType === "video") {
+    callVideo.classList.add("active");
+  } else {
+    callVideo.classList.remove("active");
+  }
 }
 
 function resetCall() {
@@ -663,6 +667,7 @@ async function createPeerConnection(targetId) {
       if (remoteVideo) {
         remoteVideo.srcObject = stream;
         remoteVideo.play().catch(() => {});
+        callVideo.classList.remove("local-only");
       }
     } else if (remoteAudio) {
       remoteAudio.srcObject = stream;
@@ -686,6 +691,7 @@ async function startCall(targetId, targetName, type = "audio") {
     if (type === "video" && localVideo) {
       localVideo.srcObject = localStream;
       localVideo.play().catch(() => {});
+      callVideo.classList.add("local-only");
     }
     const offer = await callPc.createOffer();
     await callPc.setLocalDescription(offer);
@@ -707,6 +713,7 @@ async function acceptCall() {
     if (callType === "video" && localVideo) {
       localVideo.srcObject = localStream;
       localVideo.play().catch(() => {});
+      callVideo.classList.add("local-only");
     }
     await callPc.setRemoteDescription(callOffer);
     const answer = await callPc.createAnswer();
