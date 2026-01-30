@@ -1,6 +1,6 @@
 # DataSiber Talk
 
-Private room chat berbasis Primus WebSocket dengan histori chat tersimpan di SQLite. Room diakses lewat link, user wajib isi nama sebelum chat. Mendukung emoji picker, kirim file dengan caption, voice note, dan audio call 1‑1 (STUN‑only).
+Private room chat berbasis Primus WebSocket dengan histori chat tersimpan di SQLite. Room diakses lewat link, user wajib isi nama sebelum chat. Mendukung emoji picker, kirim file dengan caption, voice note, serta audio/video call 1‑1 (STUN‑only).
 
 ## Fitur Utama
 - **Room privat via link**: `?room=...` otomatis dibuat jika belum ada.
@@ -17,12 +17,14 @@ Private room chat berbasis Primus WebSocket dengan histori chat tersimpan di SQL
 - **New room** dan **clear chat** (hapus pesan + file).
 - **Reconnect** otomatis saat jaringan putus.
 - **Audio call 1‑1 (STUN‑only)** dengan signaling via Primus.
+- **Video call 1‑1 (STUN‑only)** dengan kualitas Low/Medium.
+- **Switch camera**, **mute**, dan **blur** (blur dikirim ke lawan + preview lokal).
 
 ## Teknologi
 - Node.js (ESM)
 - Primus (transformer `websockets` + `ws`)
 - SQLite (`sqlite3`)
-- WebRTC (audio call)
+- WebRTC (audio/video call)
 
 ## Struktur Direktori
 - `server.js` – server HTTP + Primus + SQLite + upload file.
@@ -60,10 +62,45 @@ Private room chat berbasis Primus WebSocket dengan histori chat tersimpan di SQL
 - Batas ukuran file: **20MB** (client + server).
 - Voice note juga disimpan sebagai file audio (`.webm`).
 
-## Audio Call 1‑1 (STUN‑only)
+## Audio/Video Call 1‑1 (STUN‑only)
 - Signaling via Primus.
-- STUN server: `stun:stun.l.google.com:19302`.
+- STUN server default: `stun:stun.l.google.com:19302`.
 - Tidak ada TURN → beberapa jaringan bisa gagal (NAT ketat).
+- Kualitas video bisa dipilih (Low/Medium).
+- Fitur tambahan: **mute**, **switch camera**, **blur**.
+
+## Deploy STUN/TURN Sendiri (Opsional)
+Rekomendasi pakai **coturn** di Ubuntu.
+
+Install:
+```bash
+sudo apt update
+sudo apt install coturn
+```
+
+Konfigurasi dasar (`/etc/turnserver.conf`):
+```
+listening-port=3478
+fingerprint
+use-auth-secret
+static-auth-secret=YOUR_SECRET
+realm=your-domain.com
+```
+
+Aktifkan service:
+```bash
+sudo systemctl enable coturn
+sudo systemctl restart coturn
+```
+
+Lalu pakai di client:
+```js
+iceServers: [
+  { urls: "stun:your-domain.com:3478" }
+]
+```
+
+> Untuk koneksi lebih stabil, aktifkan TURN juga (lt-cred-mech + user/pass).
 
 ## Konfigurasi Penting
 - **PORT**: default `3000` (bisa override via env `PORT`).
