@@ -74,6 +74,10 @@ let isMuted = false;
 let videoDeviceIds = [];
 let currentVideoDeviceId = null;
 let isBlurred = false;
+let ringtoneContext = null;
+let ringtoneTimer = null;
+let ringtoneOsc = null;
+let ringtoneGain = null;
 
 function formatTime(iso) {
   const date = iso ? new Date(iso) : new Date();
@@ -618,18 +622,29 @@ function updateCallUI() {
     callStatus.textContent = "";
     callVideo.classList.remove("active");
     callVideo.classList.remove("local-only");
+    callQuality.style.display = "none";
+    callSwitchCamera.style.display = "none";
+    callBlur.style.display = "none";
     return;
   }
   callBar.classList.add("active");
   if (callState === "calling") {
     callStatus.textContent = `Memanggil ${callPeerName || "user"}...`;
+  } else if (callState === "ringing") {
+    callStatus.textContent = "Berdering...";
   } else if (callState === "in-call") {
     callStatus.textContent = `Panggilan dengan ${callPeerName || "user"}`;
   }
   if (callType === "video") {
     callVideo.classList.add("active");
+    callQuality.style.display = "inline-flex";
+    callSwitchCamera.style.display = "inline-flex";
+    callBlur.style.display = "inline-flex";
   } else {
     callVideo.classList.remove("active");
+    callQuality.style.display = "none";
+    callSwitchCamera.style.display = "none";
+    callBlur.style.display = "none";
   }
 }
 
@@ -641,6 +656,7 @@ function resetCall() {
   callType = "audio";
   isMuted = false;
   isBlurred = false;
+  stopRingtone();
   if (callPc) {
     callPc.onicecandidate = null;
     callPc.ontrack = null;
@@ -732,6 +748,11 @@ async function startCall(targetId, targetName, type = "audio") {
   callType = type;
   callState = "calling";
   updateCallUI();
+  if (type === "video") {
+    isBlurred = true;
+    updateBlurState();
+  }
+  startRingtone();
   try {
     await loadVideoDevices();
     localStream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(type));
@@ -747,6 +768,9 @@ async function startCall(targetId, targetName, type = "audio") {
     const offer = await callPc.createOffer();
     await callPc.setLocalDescription(offer);
     primus.write({ type: "call_offer", to: targetId, sdp: offer, callType: type });
+    if (callType === "video" && isBlurred) {
+      primus.write({ type: "call_blur", to: targetId, enabled: true });
+    }
   } catch {
     resetCall();
   }
@@ -757,6 +781,11 @@ async function acceptCall() {
   callOverlay.classList.add("hidden");
   callState = "in-call";
   updateCallUI();
+  stopRingtone();
+  if (callType === "video") {
+    isBlurred = true;
+    updateBlurState();
+  }
   try {
     await loadVideoDevices();
     localStream = await navigator.mediaDevices.getUserMedia(getMediaConstraints(callType));
@@ -773,6 +802,9 @@ async function acceptCall() {
     const answer = await callPc.createAnswer();
     await callPc.setLocalDescription(answer);
     primus.write({ type: "call_answer", to: callPeerId, sdp: answer, callType });
+    if (callType === "video" && isBlurred) {
+      primus.write({ type: "call_blur", to: callPeerId, enabled: true });
+    }
     if (callType === "audio" && remoteAudio) remoteAudio.play().catch(() => {});
   } catch {
     resetCall();
@@ -828,7 +860,7 @@ function updateMuteState() {
   localStream.getAudioTracks().forEach((track) => {
     track.enabled = !isMuted;
   });
-  callMute.textContent = isMuted ? "🔈" : "🔇";
+  callMute.textContent = isMuted ? "🔇" : "🔊";
   callMute.title = isMuted ? "Unmute" : "Mute";
 }
 
@@ -839,6 +871,47 @@ function updateBlurState() {
     if (isBlurred) localVideo.classList.add("blur");
     else localVideo.classList.remove("blur");
   }
+}
+
+function startRingtone() {
+  if (ringtoneContext) return;
+  try {
+    ringtoneContext = new (window.AudioContext || window.webkitAudioContext)();
+    ringtoneGain = ringtoneContext.createGain();
+    ringtoneGain.gain.value = 0.08;
+    ringtoneGain.connect(ringtoneContext.destination);
+    const beep = () => {
+      ringtoneOsc = ringtoneContext.createOscillator();
+      ringtoneOsc.type = "sine";
+      ringtoneOsc.frequency.value = 800;
+      ringtoneOsc.connect(ringtoneGain);
+      ringtoneOsc.start();
+      setTimeout(() => {
+        try {
+          ringtoneOsc.stop();
+        } catch {}
+      }, 300);
+    };
+    beep();
+    ringtoneTimer = setInterval(beep, 1200);
+  } catch {}
+}
+
+function stopRingtone() {
+  if (ringtoneTimer) clearInterval(ringtoneTimer);
+  ringtoneTimer = null;
+  if (ringtoneOsc) {
+    try {
+      ringtoneOsc.stop();
+    } catch {}
+  }
+  ringtoneOsc = null;
+  if (ringtoneContext) {
+    try {
+      ringtoneContext.close();
+    } catch {}
+  }
+  ringtoneContext = null;
 }
 
 function sendJoin(name) {
@@ -925,6 +998,9 @@ primus.on("data", async (data) => {
     callPeerName = data.name || "Anon";
     callType = data.callType || "audio";
     callOffer = data.sdp;
+    callState = "ringing";
+    updateCallUI();
+    startRingtone();
     callFrom.textContent = `${callPeerName} sedang memanggil (${callType})`;
     callOverlay.classList.remove("hidden");
     return;
@@ -940,6 +1016,7 @@ primus.on("data", async (data) => {
     if (!callPc) return;
     await callPc.setRemoteDescription(data.sdp);
     callState = "in-call";
+    stopRingtone();
     updateCallUI();
     return;
   }
