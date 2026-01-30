@@ -716,8 +716,8 @@ async function loadVideoDevices() {
 async function createPeerConnection(targetId) {
   const pc = new RTCPeerConnection({
     iceServers: [
-      { urls: "stun:stun.datasiber.com:8080" },
-      { urls: "turn:stun.datasiber.com:8080", username: "stun", credential: "StunIniBro.." },
+      { urls: "stun:stun.datasiber.com:443" },
+      { urls: "turn:stun.datasiber.com:443", username: "stun", credential: "StunIniBro.." },
     ],
   });
   pc.onicecandidate = (event) => {
