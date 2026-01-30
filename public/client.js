@@ -812,6 +812,24 @@ async function acceptCall() {
 }
 
 async function updateVideoQuality() {
+  await replaceVideoTrack();
+}
+
+async function switchCamera() {
+  if (callType !== "video" || callState !== "in-call") return;
+  await loadVideoDevices();
+  if (videoDeviceIds.length > 1) {
+    const idx = Math.max(0, videoDeviceIds.indexOf(currentVideoDeviceId));
+    const nextIdx = (idx + 1) % videoDeviceIds.length;
+    currentVideoDeviceId = videoDeviceIds[nextIdx];
+    await replaceVideoTrack();
+    return;
+  }
+  currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
+  await replaceVideoTrack();
+}
+
+async function replaceVideoTrack() {
   if (callType !== "video" || !callPc || !localStream) return;
   try {
     const sender = callPc.getSenders().find((s) => s.track && s.track.kind === "video");
@@ -839,20 +857,6 @@ async function updateVideoQuality() {
       localVideo.play().catch(() => {});
     }
   } catch {}
-}
-
-async function switchCamera() {
-  if (callType !== "video" || callState !== "in-call") return;
-  await loadVideoDevices();
-  if (videoDeviceIds.length > 1) {
-    const idx = Math.max(0, videoDeviceIds.indexOf(currentVideoDeviceId));
-    const nextIdx = (idx + 1) % videoDeviceIds.length;
-    currentVideoDeviceId = videoDeviceIds[nextIdx];
-    await updateVideoQuality();
-    return;
-  }
-  currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
-  await updateVideoQuality();
 }
 
 function updateMuteState() {
