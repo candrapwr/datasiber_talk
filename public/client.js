@@ -718,6 +718,7 @@ async function createPeerConnection(targetId) {
     iceServers: [
       { urls: "stun:stun.datasiber.com:443" },
       { urls: "turn:stun.datasiber.com:443", username: "stun", credential: "StunIniBro.." },
+      { urls: "turn:stun.datasiber.com:443?transport=tcp", username: "stun", credential: "StunIniBro.." },
     ],
   });
   pc.onicecandidate = (event) => {
