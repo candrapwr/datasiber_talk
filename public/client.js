@@ -716,8 +716,6 @@ async function loadVideoDevices() {
 async function createPeerConnection(targetId) {
   const pc = new RTCPeerConnection({
     iceServers: [
-      { urls: "stun:stun.datasiber.com:443" },
-      { urls: "turn:stun.datasiber.com:443", username: "stun", credential: "StunIniBro.." },
       { urls: "turn:stun.datasiber.com:443?transport=tcp", username: "stun", credential: "StunIniBro.." },
     ],
   });
